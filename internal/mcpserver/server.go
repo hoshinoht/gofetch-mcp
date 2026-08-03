@@ -54,7 +54,7 @@ func New(version string) *Server {
 	}, s.fetch)
 	mcp.AddTool(s.sdkServer, &mcp.Tool{
 		Name:        "web_search",
-		Description: "Keyless web search (DuckDuckGo with Mojeek fallback). Returns title, url, and snippet per result.",
+		Description: "Web search: Exa API when a key is configured, keyless DuckDuckGo/Mojeek fallback; rate-limited backends are retried once then rerouted. Returns title, url, snippet, and which backend answered (source).",
 	}, s.webSearch)
 
 	return s

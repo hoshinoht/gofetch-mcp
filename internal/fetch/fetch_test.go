@@ -1,6 +1,7 @@
 package fetch
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -26,6 +27,47 @@ func TestConvertHTMLPicksMainContent(t *testing.T) {
 	}
 	if !strings.Contains(md, "https://example.com/rel") {
 		t.Errorf("relative link not absolutized: %q", md)
+	}
+}
+
+func TestConvertHTMLTables(t *testing.T) {
+	html := `<html><body><article>
+<table><thead><tr><th>Agent</th><th>Model</th></tr></thead>
+<tbody><tr><td>plan</td><td>sol</td></tr><tr><td>explore</td><td>luna</td></tr></tbody></table>
+</article></body></html>`
+
+	md, _, err := convertHTML([]byte(html), "https://example.com/docs/")
+	if err != nil {
+		t.Fatalf("convertHTML: %v", err)
+	}
+	normalized := regexp.MustCompile(` +`).ReplaceAllString(md, " ")
+	if !strings.Contains(normalized, "| Agent | Model |") {
+		t.Errorf("table header not converted to pipe table: %q", md)
+	}
+	if !strings.Contains(normalized, "| plan | sol |") {
+		t.Errorf("table row not converted: %q", md)
+	}
+}
+
+func TestConvertHTMLResolvesLinksAgainstPagePath(t *testing.T) {
+	html := `<html><body><article>
+<p><a href="#install">Install section</a></p>
+<p><a href="../sibling">Sibling page</a></p>
+<p><img src="diagram.png" alt="diagram"></p>
+</article></body></html>`
+
+	md, _, err := convertHTML([]byte(html), "https://example.com/docs/page/")
+	if err != nil {
+		t.Fatalf("convertHTML: %v", err)
+	}
+	if !strings.Contains(md, "https://example.com/docs/page/#install") {
+		t.Errorf("fragment link lost page path: %q", md)
+	}
+	if !strings.Contains(md, "https://example.com/docs/sibling") {
+		t.Errorf("../ path not resolved: %q", md)
+	}
+	if !strings.Contains(md, "https://example.com/docs/page/diagram.png") {
+		t.Errorf("relative img src not resolved: %q", md)
 	}
 }
 
