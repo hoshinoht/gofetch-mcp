@@ -199,10 +199,10 @@ func TestDocCacheBoundsMemory(t *testing.T) {
 }
 
 func TestFocusMatching(t *testing.T) {
-	if !containsTerm("cats are here", "cat") || containsTerm("a good day", "go") || !containsTerm("use go here", "go") || !containsTerm("rate limiting", "limit") {
+	if !containsTerm("cats are here", "cat", false) || containsTerm("a good day", "go", false) || !containsTerm("use go here", "go", false) || !containsTerm("rate limiting", "limit", false) {
 		t.Error("word-boundary matching wrong")
 	}
-	if !containsTerm("これは東京の話", "東京") {
+	if !containsTerm("これは東京の話", "東京", false) {
 		t.Error("CJK terms match as substrings")
 	}
 
@@ -219,5 +219,17 @@ func TestFocusMatching(t *testing.T) {
 	f = focusDocument(md, "how are bursts queued")
 	if !f.matched || !strings.Contains(f.text, "## Rate limiting") || strings.Contains(f.text, "rate of change") {
 		t.Errorf("multi-term focus: %q", f.text)
+	}
+
+	// Quoted phrases match exactly; unquoted words still allow inflections.
+	doc := "# API\n\n## Throttling\n\nRate limiting applies per key."
+	if f := focusDocument(doc, `"rate limit"`); f.matched {
+		t.Errorf("quoted phrase must not match an inflected form: %+v", f)
+	}
+	if f := focusDocument(doc, "rate limit"); !f.matched {
+		t.Error("unquoted words should match inflected forms")
+	}
+	if f := focusDocument(doc+"\n\nThe rate limit is 10/s.", `"rate limit"`); !f.matched || !strings.Contains(f.text, "10/s") {
+		t.Errorf("exact quoted phrase should match: %+v", f)
 	}
 }

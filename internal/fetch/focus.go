@@ -19,6 +19,7 @@ const (
 type focusTerm struct {
 	text   string // lower-cased, whitespace-collapsed
 	weight int
+	exact  bool // quoted phrase: whole-word match, no inflection allowed
 }
 
 type focusResult struct {
@@ -42,17 +43,17 @@ var stopwords = map[string]bool{
 func parseFocus(focus string) []focusTerm {
 	var terms []focusTerm
 	seen := map[string]bool{}
-	add := func(text string, weight int) {
+	add := func(text string, weight int, exact bool) {
 		text = collapseSpace(strings.ToLower(text))
 		if text == "" || seen[text] {
 			return
 		}
 		seen[text] = true
-		terms = append(terms, focusTerm{text, weight})
+		terms = append(terms, focusTerm{text, weight, exact})
 	}
 
 	for _, m := range quotedPhrase.FindAllStringSubmatch(focus, -1) {
-		add(m[1]+m[2], 3)
+		add(m[1]+m[2], 3, true)
 	}
 	rest := quotedPhrase.ReplaceAllString(focus, " ")
 
@@ -71,10 +72,10 @@ func parseFocus(focus string) []focusTerm {
 		content = words // a query of only stopwords still means something
 	}
 	if len(content) >= 2 && len(content) <= 6 {
-		add(strings.Join(content, " "), 2)
+		add(strings.Join(content, " "), 2, false)
 	}
 	for _, w := range content {
-		add(w, 1)
+		add(w, 1, false)
 	}
 	return terms
 }
@@ -98,7 +99,7 @@ func focusDocument(markdown, focus string) focusResult {
 	for i, block := range blocks {
 		norm := collapseSpace(strings.ToLower(block))
 		for t, term := range terms {
-			if containsTerm(norm, term.text) {
+			if containsTerm(norm, term.text, term.exact) {
 				scores[i] += term.weight
 				hit[t] = true
 			}
@@ -169,9 +170,10 @@ func focusDocument(markdown, focus string) focusResult {
 // containsTerm matches term in s (both lower-cased). Terms that start with
 // a Latin letter or digit must start at a word boundary and may only be
 // followed by a common inflection, so "go" does not match "good" but "cat"
-// matches "cats" and "limit" matches "limiting"; other scripts (CJK, ...)
-// match as plain substrings.
-func containsTerm(s, term string) bool {
+// matches "cats" and "limit" matches "limiting"; with exact (quoted
+// phrases) the term must also end at a word boundary. Other scripts (CJK,
+// ...) match as plain substrings.
+func containsTerm(s, term string, exact bool) bool {
 	first, _ := utf8.DecodeRuneInString(term)
 	if !(unicode.Is(unicode.Latin, first) || unicode.IsDigit(first)) {
 		return strings.Contains(s, term)
@@ -184,7 +186,8 @@ func containsTerm(s, term string) bool {
 		i += from
 		end := i + len(term)
 		prev, _ := utf8.DecodeLastRuneInString(s[:i])
-		if (i == 0 || !isWordRune(prev)) && inflectionSuffix[wordAt(s[end:])] {
+		suffix := wordAt(s[end:])
+		if (i == 0 || !isWordRune(prev)) && (suffix == "" || (!exact && inflectionSuffix[suffix])) {
 			return true
 		}
 		from = end
